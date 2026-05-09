@@ -7,22 +7,27 @@
     "icon": "./assets/images/icon.png",
     "scheme": "goaltrackerapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.carloshuarcaya.goaltracker",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.carloshuarcaya.goaltracker"
+        ]
+      }
     },
     "android": {
+      "package": "com.carloshuarcaya.goaltracker",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -38,7 +43,11 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "@bacons/apple-targets",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
