@@ -1,98 +1,131 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { GoalCard } from "@/components/goal-card";
+import {
+  buildGoalTree,
+  getCompositeStats,
+  getGoalStatus,
+  sortGoalsSmart,
+  useGoals,
+} from "@/lib/goals";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { data: goals, isLoading, refetch, error } = useGoals();
+  const [refreshing, setRefreshing] = useState(false);
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const tree = useMemo(() => buildGoalTree(goals ?? []), [goals]);
+  const totalCount = tree.length;
+  const sorted = useMemo(() => sortGoalsSmart(tree), [tree]);
+  const statsById = useMemo(() => {
+    const m = new Map<string, { done: number; total: number }>();
+    for (const node of tree) m.set(node.id, getCompositeStats(node));
+    return m;
+  }, [tree]);
+
+  const breakdown = useMemo(() => {
+    const counts = { overdue: 0, dueSoon: 0, active: 0, completed: 0 };
+    tree.forEach((g) => {
+      const s = getGoalStatus(g);
+      if (s === "overdue") counts.overdue += 1;
+      else if (s === "due-soon") counts.dueSoon += 1;
+      else if (s === "active") counts.active += 1;
+      else counts.completed += 1;
+    });
+    return counts;
+  }, [tree]);
+
+  const headline = useMemo(() => {
+    if (isLoading) return "Loading…";
+    if (totalCount === 0) return "Your goals.";
+    if (breakdown.overdue > 0 || breakdown.dueSoon > 0)
+      return "Your urgent\ngoals.";
+    if (breakdown.active > 0) return "Your active\ngoals.";
+    return "All goals\ndone.";
+  }, [breakdown, isLoading, totalCount]);
+
+  const motivation = useMemo(() => {
+    if (isLoading || totalCount === 0) return "";
+    if (breakdown.overdue > 0)
+      return "Time to clear the backlog. One at a time.";
+    if (breakdown.dueSoon > 0)
+      return "A few deadlines coming up — you got this.";
+    if (breakdown.active > 0)
+      return "Keep the momentum going. Small wins add up.";
+    return "You crushed it all. Ready for the next one?";
+  }, [breakdown, isLoading, totalCount]);
+
+  return (
+    <SafeAreaView className="flex-1 bg-white dark:bg-brand-black">
+      <ScrollView
+        contentContainerClassName="px-6 pt-6 pb-32 gap-6"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+          />
+        }
+      >
+        <View className="gap-2">
+          <Text
+            className="font-display text-brand-black dark:text-white text-4xl"
+            style={{ lineHeight: 0.85 * 36, letterSpacing: -0.5 }}
+          >
+            {headline}
+          </Text>
+          {motivation ? (
+            <Text className="font-semibold text-neutral-warmDark dark:text-neutral-gray text-base">
+              {motivation}
+            </Text>
+          ) : null}
+        </View>
+
+        {isLoading ? (
+          <View className="items-center py-8">
+            <ActivityIndicator color="#163300" />
+          </View>
+        ) : error ? (
+          <View className="rounded-token-xl border border-semantic-danger/30 bg-semantic-danger/10 px-4 py-3">
+            <Text className="font-semibold text-semantic-danger text-sm">
+              Couldn’t load goals. Pull to retry.
+            </Text>
+          </View>
+        ) : totalCount === 0 ? (
+          <View className="rounded-token-xl border border-brand-black/10 dark:border-white/10 px-4 py-6 bg-white dark:bg-neutral-darkSurface gap-2 items-start">
+            <Text className="font-semibold text-brand-black dark:text-white text-base">
+              No goals yet.
+            </Text>
+            <Text className="font-semibold text-neutral-warmDark dark:text-neutral-gray text-sm">
+              Tap the green “+” to create your first one.
+            </Text>
+          </View>
+        ) : (
+          <View className="gap-3">
+            {sorted.map((goal) => (
+              <GoalCard
+                key={goal.id}
+                goal={goal}
+                childrenStats={statsById.get(goal.id)}
+              />
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
