@@ -25,12 +25,16 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+logs/
 
-# macOS
+# macOS / Windows
 .DS_Store
+Thumbs.db
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -41,3 +45,23 @@ app-example
 # generated native folders
 /ios
 /android
+
+# IDE / editors
+.idea/
+.fleet/
+.zed/
+*.swp
+*.swo
+
+# Linters / test caches
+.eslintcache
+coverage/
+
+# EAS / build artifacts
+*.ipa
+*.apk
+*.aab
+build/
+
+# Claude Code (local user settings — comandos compartidos sí se trackean)
+.claude/settings.local.json
