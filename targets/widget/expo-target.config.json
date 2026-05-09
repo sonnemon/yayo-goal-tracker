@@ -1,0 +1,11 @@
+{
+  "type": "widget",
+  "icon": "../../assets/images/icon.png",
+  "deploymentTarget": "17.0",
+  "frameworks": ["SwiftUI", "WidgetKit", "AppIntents"],
+  "entitlements": {
+    "com.apple.security.application-groups": [
+      "group.com.carloshuarcaya.goaltracker"
+    ]
+  }
+}
