@@ -23,10 +23,13 @@ import {
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   deadlineToISODate,
+  formatNumber,
+  sanitizeDecimalInput,
   useGoal,
   useGoals,
   useUpdateGoal,
 } from "@/lib/goals";
+import { usePremium } from "@/lib/iap";
 import { useCreateUnit, useUnits } from "@/lib/units";
 
 const PRESET_UNIT_OPTIONS: UnitOption[] = [
@@ -46,6 +49,7 @@ export default function EditGoalScreen() {
   const { data: goal, isLoading } = useGoal(id);
   const updateGoal = useUpdateGoal(id ?? "");
   const createUnit = useCreateUnit();
+  const { isPro } = usePremium();
   const { data: customUnits } = useUnits();
   const { data: allGoals } = useGoals();
   const parentGoal = goal?.parent_id
@@ -58,6 +62,7 @@ export default function EditGoalScreen() {
   const muteColor = isDark ? "#6E726B" : "#868685";
 
   const [name, setName] = useState("");
+  const [start, setStart] = useState("0");
   const [target, setTarget] = useState("");
   const [icon, setIcon] = useState<string>(DEFAULT_ICON);
   const [unitId, setUnitId] = useState<string>("none");
@@ -68,6 +73,8 @@ export default function EditGoalScreen() {
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [notes, setNotes] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
   const [iconSheetOpen, setIconSheetOpen] = useState(false);
   const [unitSheetOpen, setUnitSheetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +100,7 @@ export default function EditGoalScreen() {
       setIcon(goal.icon || DEFAULT_ICON);
       if (goal.kind === "simple") {
         setTarget(goal.total != null ? String(goal.total) : "");
+        setStart(String(goal.start ?? 0));
         const matched = allUnits.find((u) => u.label === goal.unit);
         setUnitId(goal.unit ? (matched?.id ?? goal.unit) : "none");
       }
@@ -102,15 +110,23 @@ export default function EditGoalScreen() {
       } else {
         setHasDeadline(false);
       }
+      if (goal.notes) {
+        setNotes(goal.notes);
+        setShowNotes(true);
+      }
       setHydrated(true);
     }
   }, [goal, hydrated, allUnits]);
 
+  const startNumber = parseFloat(start) || 0;
   const targetNumber = parseFloat(target);
   const targetValid =
     target.trim().length > 0 &&
     !Number.isNaN(targetNumber) &&
-    targetNumber > 0;
+    targetNumber >= 0 &&
+    targetNumber !== startNumber;
+  const decreasing =
+    !Number.isNaN(targetNumber) && targetNumber < startNumber;
   const canSubmit =
     name.trim().length > 0 &&
     (isComposite || targetValid) &&
@@ -126,19 +142,23 @@ export default function EditGoalScreen() {
     if (!canSubmit || !goal) return;
     setError(null);
     try {
+      const notesValue = showNotes && notes.trim() ? notes.trim() : null;
       if (isComposite) {
         await updateGoal.mutateAsync({
           name: name.trim(),
           icon,
           deadline: hasDeadline ? deadlineToISODate(deadline) : null,
+          notes: notesValue,
         });
       } else {
         await updateGoal.mutateAsync({
           name: name.trim(),
           total: targetNumber,
+          start: startNumber,
           unit: unitForSave,
           icon,
           deadline: hasDeadline ? deadlineToISODate(deadline) : null,
+          notes: notesValue,
         });
         if (isCustomLabel) {
           createUnit.mutate(unitForSave);
@@ -260,43 +280,92 @@ export default function EditGoalScreen() {
             ) : (
               <>
                 <View className="h-px bg-brand-black/10 dark:bg-white/[0.08]" />
-                <View className="flex-row items-center gap-2.5">
-                  <Text className="text-neutral-gray dark:text-[#6E726B] text-[13px] font-semibold w-14">
+                <View className="gap-2.5">
+                  <Text className="text-neutral-gray dark:text-[#6E726B] text-[13px] font-semibold">
                     Target
                   </Text>
-                  <TextInput
-                    value={target}
-                    onChangeText={(t) => setTarget(t.replace(/[^\d.]/g, ""))}
-                    placeholder="0"
-                    placeholderTextColor={muteColor}
-                    keyboardType="decimal-pad"
-                    className="flex-1 text-brand-black dark:text-[#F5F6F4] text-[28px] font-semibold text-right"
-                    style={{ padding: 0, lineHeight: 32 }}
-                  />
-                  <Pressable
-                    onPress={() => setUnitSheetOpen(true)}
-                    className={`flex-row items-center gap-1.5 h-9 px-3 rounded-pill active:scale-95 ${
-                      unitId === "none"
-                        ? "bg-neutral-lightSurface dark:bg-[#1F221F]"
-                        : "bg-brand-green"
-                    }`}
-                    style={{ minWidth: 56 }}
-                  >
+                  <View className="flex-row items-center gap-2">
+                    <View className="flex-1 px-3 py-2 rounded-token-md border border-brand-black/10 dark:border-white/[0.08] bg-neutral-lightSurface dark:bg-[#161816]">
+                      <Text className="text-neutral-gray text-[10px] font-semibold uppercase tracking-wider">
+                        From
+                      </Text>
+                      <TextInput
+                        value={start}
+                        onChangeText={(t) =>
+                          setStart(sanitizeDecimalInput(t))
+                        }
+                        placeholder="0"
+                        placeholderTextColor={muteColor}
+                        keyboardType="decimal-pad"
+                        className="text-brand-black dark:text-[#F5F6F4] text-[22px] font-semibold"
+                        style={{ padding: 0 }}
+                      />
+                    </View>
                     <Text
-                      className={`text-sm font-semibold ${
-                        unitId === "none"
-                          ? "text-brand-black dark:text-[#F5F6F4]"
-                          : "text-brand-greenDark"
+                      className={`text-[22px] font-semibold w-7 text-center ${
+                        decreasing
+                          ? "text-semantic-danger"
+                          : "text-brand-greenDark dark:text-brand-green"
                       }`}
                     >
-                      {currentUnit.label}
+                      {decreasing ? "↓" : "→"}
                     </Text>
-                    <Ionicons
-                      name="chevron-down"
-                      size={14}
-                      color={unitId === "none" ? textColor : "#163300"}
-                    />
-                  </Pressable>
+                    <View
+                      className={`flex-1 px-3 py-2 rounded-token-md border bg-neutral-lightSurface dark:bg-[#161816] ${
+                        targetValid
+                          ? "border-brand-black/20 dark:border-white/[0.16]"
+                          : "border-brand-black/10 dark:border-white/[0.08]"
+                      }`}
+                    >
+                      <Text className="text-neutral-gray text-[10px] font-semibold uppercase tracking-wider">
+                        Target
+                      </Text>
+                      <TextInput
+                        value={target}
+                        onChangeText={(t) =>
+                          setTarget(sanitizeDecimalInput(t))
+                        }
+                        placeholder="0"
+                        placeholderTextColor={muteColor}
+                        keyboardType="decimal-pad"
+                        className="text-brand-black dark:text-[#F5F6F4] text-[22px] font-semibold"
+                        style={{ padding: 0 }}
+                      />
+                    </View>
+                  </View>
+                  <View className="flex-row items-center justify-between gap-2">
+                    <Text className="text-neutral-gray dark:text-[#6E726B] text-[12px] font-semibold flex-1">
+                      {decreasing
+                        ? `Reduce by ${formatNumber(startNumber - targetNumber)}`
+                        : !Number.isNaN(targetNumber) && targetNumber > startNumber
+                          ? `Build up ${formatNumber(targetNumber - startNumber)}`
+                          : " "}
+                    </Text>
+                    <Pressable
+                      onPress={() => setUnitSheetOpen(true)}
+                      className={`flex-row items-center gap-1.5 h-9 px-3 rounded-pill active:scale-95 ${
+                        unitId === "none"
+                          ? "bg-neutral-lightSurface dark:bg-[#1F221F]"
+                          : "bg-brand-green"
+                      }`}
+                      style={{ minWidth: 56 }}
+                    >
+                      <Text
+                        className={`text-sm font-semibold ${
+                          unitId === "none"
+                            ? "text-brand-black dark:text-[#F5F6F4]"
+                            : "text-brand-greenDark"
+                        }`}
+                      >
+                        {currentUnit.label}
+                      </Text>
+                      <Ionicons
+                        name="chevron-down"
+                        size={14}
+                        color={unitId === "none" ? textColor : "#163300"}
+                      />
+                    </Pressable>
+                  </View>
                 </View>
               </>
             )}
@@ -377,6 +446,61 @@ export default function EditGoalScreen() {
             )}
           </View>
 
+          {/* notes section */}
+          <View className="mt-3.5">
+            {!showNotes ? (
+              <Pressable
+                onPress={() => setShowNotes(true)}
+                className="px-4 py-3.5 rounded-token-lg bg-white dark:bg-[#0E0F0E] border border-dashed border-brand-black/20 dark:border-white/[0.16] flex-row items-center justify-between active:scale-[0.98]"
+              >
+                <View className="flex-row items-center gap-2.5">
+                  <Ionicons name="document-text-outline" size={18} color={dimColor} />
+                  <Text className="text-neutral-warmDark dark:text-[#A6ABA4] text-[15px] font-semibold">
+                    Add note
+                  </Text>
+                </View>
+                <Text className="text-neutral-gray dark:text-[#6E726B] text-[13px] font-semibold">
+                  Optional
+                </Text>
+              </Pressable>
+            ) : (
+              <View className="bg-white dark:bg-[#0E0F0E] border border-brand-black/10 dark:border-white/[0.08] rounded-[24px]">
+                <View className="flex-row items-center justify-between px-4 py-3.5">
+                  <View className="flex-row items-center gap-2.5">
+                    <Ionicons name="document-text-outline" size={18} color={dimColor} />
+                    <Text className="text-brand-black dark:text-[#F5F6F4] text-[15px] font-semibold">
+                      Note
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center gap-2.5">
+                    <Text className="text-neutral-gray dark:text-[#6E726B] text-[12px] font-semibold">
+                      {notes.length}/500
+                    </Text>
+                    <Pressable
+                      onPress={() => { setNotes(""); setShowNotes(false); }}
+                      hitSlop={6}
+                      className="active:opacity-60"
+                    >
+                      <Ionicons name="close" size={16} color={muteColor} />
+                    </Pressable>
+                  </View>
+                </View>
+                <View className="px-4 pb-4">
+                  <TextInput
+                    value={notes}
+                    onChangeText={(t) => setNotes(t.slice(0, 500))}
+                    placeholder="Context, reminders, links…"
+                    placeholderTextColor={muteColor}
+                    multiline
+                    textAlignVertical="top"
+                    className="text-brand-black dark:text-[#F5F6F4] text-[15px] font-semibold"
+                    style={{ minHeight: 96, padding: 0, lineHeight: 22 }}
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+
           {error ? (
             <View className="mt-3.5 rounded-token-md bg-semantic-danger/10 px-4 py-3">
               <Text className="text-semantic-danger text-sm font-semibold">
@@ -415,6 +539,11 @@ export default function EditGoalScreen() {
         }}
         onAddCustom={handleAddCustomUnit}
         onClose={() => setUnitSheetOpen(false)}
+        customLocked={!isPro}
+        onLockedCreateTap={() => {
+          setUnitSheetOpen(false);
+          router.push("/premium");
+        }}
       />
     </SafeAreaView>
   );

@@ -6,6 +6,7 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useGoalLimit } from "@/lib/entitlements";
 
 const TAB_ICONS: Record<
   string,
@@ -26,8 +27,13 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
   const insets = useSafeAreaInsets();
+  const { canCreate } = useGoalLimit();
   const activeColor = isDark ? "#9fe870" : "#163300";
   const inactiveColor = isDark ? "#868685" : "#454745";
+
+  function handleCreatePress() {
+    router.push(canCreate ? "/goal/new" : "/premium");
+  }
 
   return (
     <View
@@ -101,7 +107,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
       </BlurView>
 
       <Pressable
-        onPress={() => router.push("/goal/new")}
+        onPress={handleCreatePress}
         className="w-14 h-14 rounded-pill bg-brand-green items-center justify-center active:scale-95"
         style={{
           shadowColor: "#0e0f0c",

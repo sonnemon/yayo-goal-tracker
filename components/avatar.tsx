@@ -1,7 +1,8 @@
-import { Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 
 type Props = {
   name: string;
+  imageUrl?: string | null;
   size?: "sm" | "md" | "lg";
   onPress?: () => void;
 };
@@ -28,15 +29,27 @@ function getInitials(source: string): string {
   return trimmed.slice(0, 2).toUpperCase();
 }
 
-export function Avatar({ name, size = "md", onPress }: Props) {
+export function Avatar({ name, imageUrl, size = "md", onPress }: Props) {
   const initials = getInitials(name);
+  const hasImage = !!imageUrl;
+
   const circle = (
     <View
-      className={`${wrapperSize[size]} rounded-pill bg-brand-mint items-center justify-center`}
+      className={`${wrapperSize[size]} rounded-pill bg-brand-mint items-center justify-center overflow-hidden`}
     >
-      <Text className={`font-semibold text-brand-greenDark ${textSize[size]}`}>
-        {initials}
-      </Text>
+      {hasImage ? (
+        <Image
+          source={{ uri: imageUrl as string }}
+          className={`${wrapperSize[size]}`}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text
+          className={`font-semibold text-brand-greenDark ${textSize[size]}`}
+        >
+          {initials}
+        </Text>
+      )}
     </View>
   );
 

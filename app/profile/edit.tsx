@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Avatar } from "@/components/avatar";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { pickAndSaveAvatar, removeSavedAvatar } from "@/lib/profile";
 import { supabase } from "@/lib/supabase";
 
 export default function ProfileScreen() {
@@ -27,10 +29,17 @@ export default function ProfileScreen() {
   const initialName = (
     (user?.user_metadata?.full_name as string | undefined) ?? ""
   ).trim();
+  const initialAvatarUrl =
+    (user?.user_metadata?.avatar_url as string | undefined) ?? null;
   const email = user?.email ?? "";
+  const userId = user?.id ?? "";
+
   const [fullName, setFullName] = useState(initialName);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const trimmed = fullName.trim();
   const dirty = trimmed !== initialName;
@@ -50,6 +59,38 @@ export default function ProfileScreen() {
       return;
     }
     router.back();
+  }
+
+  async function handlePickAvatar() {
+    if (!userId || uploadingAvatar) return;
+    setAvatarError(null);
+    setUploadingAvatar(true);
+    try {
+      const newUrl = await pickAndSaveAvatar(userId);
+      if (newUrl) setAvatarUrl(newUrl);
+    } catch (err) {
+      setAvatarError(
+        err instanceof Error ? err.message : "Couldn’t update photo."
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    if (!userId || uploadingAvatar) return;
+    setAvatarError(null);
+    setUploadingAvatar(true);
+    try {
+      await removeSavedAvatar(userId);
+      setAvatarUrl(null);
+    } catch (err) {
+      setAvatarError(
+        err instanceof Error ? err.message : "Couldn’t remove photo."
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   return (
@@ -78,14 +119,55 @@ export default function ProfileScreen() {
           contentContainerClassName="px-6 pt-2 pb-8 gap-8"
           keyboardShouldPersistTaps="handled"
         >
-          <View className="items-center gap-4 pt-2">
-            <Avatar name={avatarSource} size="lg" />
+          <View className="items-center gap-3 pt-2">
+            <Pressable
+              onPress={handlePickAvatar}
+              disabled={uploadingAvatar}
+              className="active:scale-95"
+            >
+              <View className="relative">
+                <Avatar
+                  name={avatarSource}
+                  imageUrl={avatarUrl}
+                  size="lg"
+                />
+                <View className="absolute -right-1 -bottom-1 w-6 h-6 rounded-pill bg-brand-green border-2 border-white dark:border-brand-black items-center justify-center">
+                  <Ionicons name="camera" size={12} color="#163300" />
+                </View>
+                {uploadingAvatar ? (
+                  <View className="absolute inset-0 rounded-pill bg-black/40 items-center justify-center">
+                    <ActivityIndicator color="#ffffff" />
+                  </View>
+                ) : null}
+              </View>
+            </Pressable>
             <Text
               className="font-display text-brand-black dark:text-white text-3xl"
               style={{ lineHeight: 0.85 * 30, letterSpacing: -0.5 }}
             >
               {trimmed || "Your profile"}
             </Text>
+            {avatarUrl ? (
+              <Pressable
+                onPress={handleRemoveAvatar}
+                disabled={uploadingAvatar}
+                hitSlop={6}
+                className="active:opacity-60 disabled:opacity-40"
+              >
+                <Text className="font-semibold text-semantic-danger text-sm">
+                  Remove photo
+                </Text>
+              </Pressable>
+            ) : (
+              <Text className="font-semibold text-neutral-gray text-xs">
+                Tap to change
+              </Text>
+            )}
+            {avatarError ? (
+              <Text className="font-semibold text-semantic-danger text-xs text-center">
+                {avatarError}
+              </Text>
+            ) : null}
           </View>
 
           <View className="gap-5">

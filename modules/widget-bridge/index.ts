@@ -22,6 +22,7 @@ export type WidgetGoal = {
   name: string;
   progress: number;
   total: number;
+  start: number;
   unit: string;
   icon: string;
 };
@@ -37,6 +38,7 @@ export function syncGoalsToWidget(goals: WidgetGoal[]): void {
       name: g.name,
       progress: g.progress,
       total: g.total,
+      start: g.start,
       unit: g.unit,
       icon: g.icon,
     })),

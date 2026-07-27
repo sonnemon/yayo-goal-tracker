@@ -26,6 +26,10 @@ type Props = {
   onPick: (id: string) => void;
   onAddCustom: (label: string) => void;
   onClose: () => void;
+  /** When true, custom unit creation is gated. Tapping the CTA calls
+   *  `onLockedCreateTap` instead of opening the create flow. */
+  customLocked?: boolean;
+  onLockedCreateTap?: () => void;
 };
 
 export function UnitSheet({
@@ -35,6 +39,8 @@ export function UnitSheet({
   onPick,
   onAddCustom,
   onClose,
+  customLocked,
+  onLockedCreateTap,
 }: Props) {
   const [mode, setMode] = useState<"list" | "create">("list");
   const [draft, setDraft] = useState("");
@@ -148,17 +154,27 @@ export function UnitSheet({
                   })}
                 </View>
                 <Pressable
-                  onPress={() => setMode("create")}
+                  onPress={() => {
+                    if (customLocked) onLockedCreateTap?.();
+                    else setMode("create");
+                  }}
                   className="h-12 rounded-token-lg bg-neutral-lightSurface dark:bg-[#161816] border border-dashed border-brand-black/20 dark:border-white/[0.16] items-center justify-center flex-row gap-2 active:scale-[0.98]"
                 >
                   <Ionicons
-                    name="add"
-                    size={16}
+                    name={customLocked ? "lock-closed" : "add"}
+                    size={14}
                     color={isDark ? "#F5F6F4" : "#0e0f0c"}
                   />
                   <Text className="text-brand-black dark:text-[#F5F6F4] text-sm font-semibold">
                     Create custom unit
                   </Text>
+                  {customLocked ? (
+                    <View className="px-1.5 py-px rounded bg-brand-green">
+                      <Text className="text-brand-greenDark text-[10px] font-semibold">
+                        Pro
+                      </Text>
+                    </View>
+                  ) : null}
                 </Pressable>
               </ScrollView>
             </>

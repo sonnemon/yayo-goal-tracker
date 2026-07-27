@@ -1,6 +1,7 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
+import { initIAP, setIAPUser } from "@/lib/iap";
 import { supabase } from "@/lib/supabase";
 
 type AuthContextValue = {
@@ -17,13 +18,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    initIAP();
+
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
+      setIAPUser(data.session?.user?.id ?? null);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+      setIAPUser(newSession?.user?.id ?? null);
     });
 
     return () => {

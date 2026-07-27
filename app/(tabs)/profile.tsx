@@ -6,16 +6,29 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Avatar } from "@/components/avatar";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import {
+  isIAPConfigured,
+  presentCustomerCenter,
+  usePremium,
+} from "@/lib/iap";
 
 export default function ProfileTabScreen() {
   const { user, signOut } = useAuth();
   const { resolvedTheme, toggle } = useTheme();
+  const { isPro } = usePremium();
   const isDark = resolvedTheme === "dark";
   const iconColor = isDark ? "#ffffff" : "#0e0f0c";
   const chevronColor = isDark ? "#5a5c59" : "#868685";
 
+  async function handleManageSubscription() {
+    if (!isIAPConfigured()) return;
+    await presentCustomerCenter();
+  }
+
   const fullName = (user?.user_metadata?.full_name as string | undefined)?.trim();
   const email = user?.email ?? "";
+  const avatarUrl =
+    (user?.user_metadata?.avatar_url as string | undefined) ?? null;
   const displayName = fullName || (email ? email.split("@")[0] : "User");
   const avatarSource = fullName || email;
 
@@ -23,7 +36,7 @@ export default function ProfileTabScreen() {
     <SafeAreaView className="flex-1 bg-white dark:bg-brand-black">
       <ScrollView contentContainerClassName="px-6 pt-12 pb-32 gap-8">
         <View className="items-center gap-4 pt-2">
-          <Avatar name={avatarSource} size="lg" />
+          <Avatar name={avatarSource} imageUrl={avatarUrl} size="lg" />
           <View className="items-center gap-1">
             <Text
               className="font-display text-brand-black dark:text-white text-3xl text-center"
@@ -52,15 +65,27 @@ export default function ProfileTabScreen() {
               chevronColor={chevronColor}
             />
             <Divider />
-            <Row
-              icon="sparkles"
-              label="Go Premium"
-              onPress={() => router.push("/premium")}
-              iconColor="#163300"
-              labelColor="text-brand-greenDark dark:text-brand-green"
-              iconBg="bg-brand-green"
-              chevronColor={chevronColor}
-            />
+            {isPro ? (
+              <Row
+                icon="settings-outline"
+                label="Manage subscription"
+                onPress={handleManageSubscription}
+                iconColor="#163300"
+                labelColor="text-brand-greenDark dark:text-brand-green"
+                iconBg="bg-brand-green"
+                chevronColor={chevronColor}
+              />
+            ) : (
+              <Row
+                icon="sparkles"
+                label="Go Premium"
+                onPress={() => router.push("/premium")}
+                iconColor="#163300"
+                labelColor="text-brand-greenDark dark:text-brand-green"
+                iconBg="bg-brand-green"
+                chevronColor={chevronColor}
+              />
+            )}
           </Section>
         </View>
 

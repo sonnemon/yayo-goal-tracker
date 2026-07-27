@@ -6,9 +6,10 @@ import { GoalIcon } from "@/components/icon-picker";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   formatDeadlineRelative,
-  formatGoalRange,
+  formatGoalProgressText,
   type Goal,
   getGoalStatus,
+  goalProgressPct,
 } from "@/lib/goals";
 
 type Props = {
@@ -28,7 +29,7 @@ export function GoalCard({ goal, childrenStats }: Props) {
       ? (childrenStats.done / childrenStats.total) * 100
       : 0
     : goal.total && goal.progress != null
-      ? Math.min(100, (goal.progress / goal.total) * 100)
+      ? Math.max(0, Math.min(100, goalProgressPct(goal)))
       : 0;
 
   const isCompleted = status === "completed";
@@ -66,7 +67,7 @@ export function GoalCard({ goal, childrenStats }: Props) {
     ? childrenStats && childrenStats.total > 0
       ? `${childrenStats.done} / ${childrenStats.total} sub-goals`
       : "No sub-goals yet"
-    : formatGoalRange(goal.progress ?? 0, goal.total ?? 0, goal.unit);
+    : formatGoalProgressText(goal);
 
   return (
     <Pressable

@@ -1,34 +1,51 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import type { PurchasesPackage } from "react-native-purchases";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "@/components/theme/ThemeProvider";
+import {
+  fetchCurrentOffering,
+  isIAPConfigured,
+  isPremium,
+  isUserCancelled,
+  purchasePackage,
+  restorePurchases,
+} from "@/lib/iap";
 
-type Plan = {
-  id: "monthly" | "yearly";
+type PlanId = "monthly" | "yearly";
+
+type PlanRow = {
+  id: PlanId;
   label: string;
   price: string;
   badge?: string;
+  pkg: PurchasesPackage | null;
 };
 
-const PLANS: Plan[] = [
-  { id: "monthly", label: "Monthly", price: "$2.99 / month" },
-  {
-    id: "yearly",
-    label: "Yearly",
-    price: "$19.99 / year",
-    badge: "Save 44%",
-  },
-];
+const FALLBACK_MONTHLY_PRICE = "$3.99 / month";
+const FALLBACK_YEARLY_PRICE = "$24.99 / year";
+const YEARLY_SAVINGS_BADGE = "Save 48%";
 
 const FEATURES = [
-  { icon: "infinite", title: "Unlimited goals", desc: "No cap on active goals." },
+  {
+    icon: "infinite",
+    title: "Unlimited goals",
+    desc: "Beyond the 5-goal free tier.",
+  },
   {
     icon: "apps",
-    title: "iOS home screen widgets",
-    desc: "See your progress at a glance.",
+    title: "Keep your widgets",
+    desc: "Stay on the home screen after the 7-day free trial.",
   },
   {
     icon: "color-palette-outline",
@@ -46,18 +63,109 @@ export default function PremiumScreen() {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
   const iconColor = isDark ? "#ffffff" : "#0e0f0c";
-  const [selectedPlan, setSelectedPlan] = useState<Plan["id"]>("yearly");
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("yearly");
+  const [monthlyPkg, setMonthlyPkg] = useState<PurchasesPackage | null>(null);
+  const [yearlyPkg, setYearlyPkg] = useState<PurchasesPackage | null>(null);
+  const [loading, setLoading] = useState(isIAPConfigured());
+  const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
-  function handlePurchase() {
-    Alert.alert(
-      "Apple Paywall",
-      "In-app purchase isn’t wired yet. Connect RevenueCat or react-native-iap to open the StoreKit flow.",
-      [{ text: "OK" }]
-    );
+  useEffect(() => {
+    let cancelled = false;
+    if (!isIAPConfigured()) return;
+    fetchCurrentOffering()
+      .then((offering) => {
+        if (cancelled) return;
+        setMonthlyPkg(offering?.monthly ?? null);
+        setYearlyPkg(offering?.annual ?? null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const plans: PlanRow[] = [
+    {
+      id: "monthly",
+      label: "Monthly",
+      price: monthlyPkg?.product.priceString
+        ? `${monthlyPkg.product.priceString} / month`
+        : FALLBACK_MONTHLY_PRICE,
+      pkg: monthlyPkg,
+    },
+    {
+      id: "yearly",
+      label: "Yearly",
+      price: yearlyPkg?.product.priceString
+        ? `${yearlyPkg.product.priceString} / year`
+        : FALLBACK_YEARLY_PRICE,
+      badge: YEARLY_SAVINGS_BADGE,
+      pkg: yearlyPkg,
+    },
+  ];
+
+  const selected = plans.find((p) => p.id === selectedPlan)!;
+
+  async function handlePurchase() {
+    if (purchasing || restoring) return;
+    if (!isIAPConfigured()) {
+      Alert.alert(
+        "Premium not configured",
+        "Set EXPO_PUBLIC_REVENUECAT_IOS_API_KEY in your environment and run prebuild + run:ios to enable purchases."
+      );
+      return;
+    }
+    if (!selected.pkg) {
+      Alert.alert(
+        "Couldn’t load plans",
+        "Make sure the products and offerings are configured in RevenueCat for this build."
+      );
+      return;
+    }
+    setPurchasing(true);
+    try {
+      const info = await purchasePackage(selected.pkg);
+      if (isPremium(info)) {
+        router.back();
+      }
+    } catch (err) {
+      if (!isUserCancelled(err)) {
+        Alert.alert(
+          "Couldn’t complete purchase",
+          err instanceof Error ? err.message : "Something went wrong."
+        );
+      }
+    } finally {
+      setPurchasing(false);
+    }
   }
 
-  function handleRestore() {
-    Alert.alert("Restore purchases", "No purchases to restore yet.");
+  async function handleRestore() {
+    if (purchasing || restoring) return;
+    if (!isIAPConfigured()) {
+      Alert.alert("Restore", "In-app purchases aren’t configured yet.");
+      return;
+    }
+    setRestoring(true);
+    try {
+      const info = await restorePurchases();
+      if (isPremium(info)) {
+        Alert.alert("Restored", "Your Premium subscription is active again.");
+        router.back();
+      } else {
+        Alert.alert("Nothing to restore", "No active Premium found on this Apple ID.");
+      }
+    } catch (err) {
+      Alert.alert(
+        "Couldn’t restore",
+        err instanceof Error ? err.message : "Something went wrong."
+      );
+    } finally {
+      setRestoring(false);
+    }
   }
 
   return (
@@ -74,10 +182,11 @@ export default function PremiumScreen() {
         </Pressable>
         <Pressable
           onPress={handleRestore}
-          className="px-3 py-2 rounded-token-md active:bg-brand-black/5 dark:active:bg-white/5"
+          disabled={restoring || purchasing}
+          className="px-3 py-2 rounded-token-md active:bg-brand-black/5 dark:active:bg-white/5 disabled:opacity-40"
         >
           <Text className="font-semibold text-neutral-warmDark dark:text-neutral-gray text-sm">
-            Restore
+            {restoring ? "Restoring…" : "Restore"}
           </Text>
         </Pressable>
       </View>
@@ -121,7 +230,7 @@ export default function PremiumScreen() {
         </View>
 
         <View className="gap-3">
-          {PLANS.map((p) => {
+          {plans.map((p) => {
             const active = selectedPlan === p.id;
             return (
               <Pressable
@@ -186,10 +295,18 @@ export default function PremiumScreen() {
       <View className="px-6 pb-4">
         <Pressable
           onPress={handlePurchase}
-          className="bg-brand-green rounded-pill py-4 active:scale-95"
+          disabled={purchasing || restoring || loading}
+          className="bg-brand-green rounded-pill h-[54px] items-center justify-center active:scale-95 disabled:opacity-40 flex-row gap-2"
         >
+          {purchasing || loading ? (
+            <ActivityIndicator color="#163300" />
+          ) : null}
           <Text className="text-brand-greenDark text-center font-semibold text-lg">
-            Continue
+            {purchasing
+              ? "Purchasing…"
+              : loading
+                ? "Loading plans…"
+                : "Continue"}
           </Text>
         </Pressable>
       </View>

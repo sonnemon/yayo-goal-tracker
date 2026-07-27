@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,6 +16,8 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   formatGoalValue,
   getDescendantIds,
+  isGoodDelta,
+  useDeleteGoalLog,
   useGoal,
   useGoalLogs,
   useGoalLogsForIds,
@@ -78,6 +81,36 @@ export default function GoalLogsScreen() {
     for (const g of allGoals ?? []) m.set(g.id, g);
     return m;
   }, [allGoals]);
+
+  // Logs come sorted DESC by created_at, so the first occurrence
+  // of each goal_id is the most recent — only those can be deleted.
+  const latestLogIds = useMemo(() => {
+    const seen = new Set<string>();
+    const ids = new Set<string>();
+    for (const l of logs ?? []) {
+      if (seen.has(l.goal_id)) continue;
+      seen.add(l.goal_id);
+      ids.add(l.id);
+    }
+    return ids;
+  }, [logs]);
+
+  const deleteLog = useDeleteGoalLog();
+
+  function confirmDelete(logId: string) {
+    Alert.alert(
+      "Delete entry?",
+      "This will reverse the progress change on the goal.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteLog.mutate(logId),
+        },
+      ]
+    );
+  }
 
   const count = logs?.length ?? 0;
 
@@ -150,14 +183,31 @@ export default function GoalLogsScreen() {
             {logs?.map((log) => {
               const source = goalById.get(log.goal_id);
               const sourceUnit = source?.unit ?? goal?.unit ?? "";
+              const isAdd = log.amount >= 0;
+              // Coloring is "good direction" aware: for a weight-loss goal
+              // a negative amount is good (green); for savings, positive is good.
+              const isGood = source
+                ? isGoodDelta(source, log.amount)
+                : isAdd;
+              const formatted = formatGoalValue(
+                Math.abs(log.amount),
+                sourceUnit
+              );
               return (
                 <View
                   key={log.id}
                   className="flex-row items-center justify-between rounded-token-xl border border-brand-black/10 dark:border-white/10 px-4 py-3 bg-white dark:bg-neutral-darkSurface"
                 >
                   <View className="gap-1 flex-1 mr-3">
-                    <Text className="font-semibold text-brand-black dark:text-white text-base">
-                      +{formatGoalValue(log.amount, sourceUnit)}
+                    <Text
+                      className={`font-semibold text-base ${
+                        isGood
+                          ? "text-brand-black dark:text-white"
+                          : "text-semantic-danger"
+                      }`}
+                    >
+                      {isAdd ? "+" : "−"}
+                      {formatted}
                     </Text>
                     {isComposite && source ? (
                       <Text
@@ -167,16 +217,62 @@ export default function GoalLogsScreen() {
                         {source.name}
                       </Text>
                     ) : null}
+                    {log.reason ? (
+                      <Text
+                        className="text-neutral-warmDark dark:text-neutral-gray text-xs"
+                        numberOfLines={3}
+                      >
+                        {log.reason}
+                      </Text>
+                    ) : null}
                     <Text className="font-semibold text-neutral-warmDark dark:text-neutral-gray text-xs">
                       {formatLogDate(log.created_at)}
                     </Text>
                   </View>
-                  <View className="w-9 h-9 rounded-pill bg-brand-mint dark:bg-brand-greenDark items-center justify-center">
-                    <Ionicons
-                      name="add"
-                      size={18}
-                      color={isDark ? "#9fe870" : "#163300"}
-                    />
+                  <View className="flex-row items-center gap-2">
+                    <View
+                      className={`w-9 h-9 rounded-pill items-center justify-center ${
+                        isGood
+                          ? "bg-brand-mint dark:bg-brand-greenDark"
+                          : "bg-semantic-danger/10 dark:bg-semantic-danger/20"
+                      }`}
+                    >
+                      <Ionicons
+                        name={isAdd ? "add" : "remove"}
+                        size={18}
+                        color={
+                          isGood ? (isDark ? "#9fe870" : "#163300") : "#d03238"
+                        }
+                      />
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/goal/[id]/log/[logId]",
+                          params: { id, logId: log.id },
+                        })
+                      }
+                      className="w-9 h-9 rounded-pill items-center justify-center active:scale-95 active:bg-brand-black/5 dark:active:bg-white/5"
+                    >
+                      <Ionicons
+                        name="eye-outline"
+                        size={16}
+                        color={iconColor}
+                      />
+                    </Pressable>
+                    {latestLogIds.has(log.id) ? (
+                      <Pressable
+                        onPress={() => confirmDelete(log.id)}
+                        disabled={deleteLog.isPending}
+                        className="w-9 h-9 rounded-pill items-center justify-center active:scale-95 active:bg-semantic-danger/10 disabled:opacity-40"
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={16}
+                          color="#d03238"
+                        />
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               );
